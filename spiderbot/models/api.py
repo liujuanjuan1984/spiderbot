@@ -31,35 +31,36 @@ class DBAPI(BaseDB):
 
     def get_users_todo(self, working_status: Optional[bool] = None):
         """get the users url todo"""
-        users_urls = (
-            self.session.query(User.user_url).filter(User.working_status == working_status).all()
-        )
-        for i in users_urls:
-            if i:
-                logger.info("get_users_todo user url: %s", i[0])
-                yield i[0]
+        return self.session.query(User.user_url).filter(User.working_status == working_status).all()
 
     def get_users_to_get_profiles(self):
         """get the users url todo"""
-        users_urls = (
+        return (
             self.session.query(User.user_url)
             .filter(User.working_status == True)
             .filter(User.name == None)
             .all()
         )
-        for i in users_urls:
-            if i:
-                logger.info("get_users_to_get_profiles user url: %s", i[0])
-                yield i[0]
 
     def update_user_profile(self, user_url: str, name: str, avatar: bytes):
         """update user profile"""
-        self.session.query(User).filter(User.user_url == user_url).update(
-            {"name": name, "avatar": avatar}
-        )
-        self.commit()
-        logger.info("update_user_profile %s", user_url)
-        return True
+        _params = {}
+        if name:
+            _params["name"] = name
+        if avatar:
+            _params["avatar"] = avatar
+
+        if _params:
+            self.session.query(User).filter(User.user_url == user_url).update(_params)
+            self.commit()
+            logger.info("update_user_profile %s", user_url)
+        else:
+            logger.info("update_user_profile %s no params", user_url)
+
+    def add_post_url(self, user_url: str, post_url: str):
+        """add post url to db"""
+        self.add(PostURL({"user_url": user_url, "post_url": post_url}))
+        logger.info("add_post_url %s", post_url)
 
     def update_user_working_status(self, user_url: str, working_status: Optional[bool] = None):
         """update status of working"""
@@ -68,14 +69,6 @@ class DBAPI(BaseDB):
         )
         self.commit()
         logger.info("update_user_working_status %s", user_url)
-        return True
-
-    def add_post_url(self, user_url: str, post_url: str):
-        """add post url to db"""
-        url = self.session.query(PostURL).filter(PostURL.post_url == post_url).first()
-        if not url:
-            self.add(PostURL({"user_url": user_url, "post_url": post_url}))
-        logger.info("add_post_url %s", post_url)
         return True
 
     def update_url_content_status(self, post_url: str, content_status: bool):
@@ -89,27 +82,20 @@ class DBAPI(BaseDB):
 
     def get_posturls_to_getcontent(self):
         """get the urls which to get content"""
-
-        urls = self.session.query(PostURL.post_url).filter(PostURL.content_status == None).all()
-        for i in urls:
-            if i:
-                logger.info("get_posturls_to_getcontent %s", i[0])
-                yield i[0]
+        return self.session.query(PostURL.post_url).filter(PostURL.content_status == None).all()
 
     def add_post(self, post_url: str, post_time: str, text: str, screenshot: bytes):
         """add new post"""
-        post = self.session.query(Post).filter(Post.post_url == post_url).first()
-        if not post:
-            self.add(
-                Post(
-                    {
-                        "post_url": post_url,
-                        "text": text,
-                        "screenshot": screenshot,
-                        "post_time": post_time,
-                    }
-                )
+        self.add(
+            Post(
+                {
+                    "post_url": post_url,
+                    "text": text,
+                    "screenshot": screenshot,
+                    "post_time": post_time,
+                }
             )
+        )
         logger.info("add_post %s %s", post_url, post_time)
         self.update_url_content_status(post_url, True)
         return True
@@ -119,3 +105,15 @@ class DBAPI(BaseDB):
         post = self.session.query(Post).filter(Post.post_url == post_url).first()
         logger.info("get_post %s", post_url)
         return post
+
+    def get_posts(self, uid=1):
+        """get all posts data"""
+        posts = self.session.query(Post).filter(Post.uid >= uid).all()
+        logger.info("get_posts")
+        return posts
+
+    def get_profiles(self, uid=1):
+        """get all the profiles data"""
+        profiles = self.session.query(User).filter(User.uid >= uid).filter(User.name != None).all()
+        logger.info("get_profiles")
+        return profiles

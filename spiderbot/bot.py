@@ -3,7 +3,6 @@
 """bot.py"""
 import base64
 import logging
-import time
 from typing import Dict, Optional
 
 from selenium import webdriver
@@ -40,11 +39,14 @@ class SpiderBot:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--ignore-certificate-errors")
+            chrome_options.add_argument("--use-fake-device-for-media-stream")
+            chrome_options.add_argument("--use-fake-ui-for-media-stream")
             self.driver = webdriver.Chrome(options=chrome_options)
             self.driver.maximize_window()
         self.xpaths = xpaths or XPATHS
 
         self.db = DBAPI(db_name or DB_NAME, **kwargs)  # pylint: disable=invalid-name
+        self.users = self.db.get_users_todo(True)
 
     def add_users(self, working_status: Optional[bool], *user_urls):
         """add users to users table"""
@@ -58,19 +60,19 @@ class SpiderBot:
         """get post_urls from history by month and save to table urls"""
         logger.info("get_user_history_posturls %s 月, %s", month, user_url)
         self.driver.get(user_url)
-        time.sleep(sleep)
+        self.driver.implicitly_wait(sleep)
         _buttons = self.driver.find_elements(By.XPATH, self.xpaths["history"])
         for _ele in _buttons:
             if _ele.text != f"{month}月":
                 continue
             try:
                 _ele.click()
-                time.sleep(sleep)
+                self.driver.implicitly_wait(int(sleep / 2))
                 for i in range(1, 10):
                     javascript = f"window.scrollBy(0,{i*500})"
                     logger.debug("%s: javascript %s", user_url, javascript)
                     self.driver.execute_script(javascript)
-                    time.sleep(sleep)
+                    self.driver.implicitly_wait(int(sleep / 2))
 
                     _elements = self.driver.find_elements(By.XPATH, self.xpaths["posts"])
                     for _ele in _elements:
@@ -85,19 +87,23 @@ class SpiderBot:
         self,
         start_month: Optional[int] = None,
         end_month: Optional[int] = None,
-        sleep: int = 10,
+        sleep: int = 5,
     ):
         """get posts from history and save url to the datafile"""
         start_month = start_month or 1
         end_month = end_month or 12
-        for user_url in self.db.get_users_todo(True):
+        for user in self.users:
+            user_url = user[0]
             for i in range(start_month, end_month + 1):
-                self.get_user_history_posturls(user_url, month=i, sleep=sleep)
+                try:
+                    self.get_user_history_posturls(user_url, month=i, sleep=sleep)
+                except Exception as err:
+                    logger.warning("%s get_history_posturls failed %s month %s", user_url, i, err)
 
-    def get_user_new_posturls(self, user_url: str, sleep: int = 10):
+    def get_user_new_posturls(self, user_url: str, sleep: int = 5):
         """get new posturls of the user_url"""
         self.driver.get(user_url)
-        time.sleep(sleep)
+        self.driver.implicitly_wait(sleep)
         _elements = self.driver.find_elements(By.XPATH, self.xpaths["posts"])
         for _ele in _elements:
             post_url = _ele.get_attribute("href")
@@ -106,8 +112,12 @@ class SpiderBot:
 
     def get_new_posturls(self):
         """get new posturls"""
-        for user_url in self.db.get_users_todo(True):
-            self.get_user_new_posturls(user_url)
+        for user in self.users:
+            user_url = user[0]
+            try:
+                self.get_user_new_posturls(user_url)
+            except Exception as err:
+                logger.warning("%s get_new_posturls failed: %s", user_url, err)
 
     def get_post(self, post_url: str):
         """get content from one post url and save to db"""
@@ -137,8 +147,12 @@ class SpiderBot:
 
     def get_posts(self):
         """get the content of post_urls"""
-        for post_url in self.db.get_posturls_to_getcontent():
-            self.get_post(post_url)
+        for post in self.db.get_posturls_to_getcontent():
+            post_url = post[0]
+            try:
+                self.get_post(post_url)
+            except Exception as err:
+                logger.warning("%s get post failed: %s", post_url, err)
 
     def get_user_profile(self, user_url: str):
         """get the user profile:name and avatar"""
@@ -151,14 +165,22 @@ class SpiderBot:
             logger.warning("%s get avatar failed: %s", user_url, err)
             return
         avatar = base64.b64decode(_element.screenshot_as_base64)
-        name = self.driver.find_element(By.XPATH, self.xpaths["name"]).text
+        try:
+            name = self.driver.find_element(By.XPATH, self.xpaths["name"]).text
+        except Exception as err:
+            logger.info("%s get name failed: %s", user_url, err)
+            name = None
         logger.info("get_user_profile: %s %s", user_url, name)
         self.db.update_user_profile(user_url, name, avatar)
 
     def get_profiles(self):
         """get all profiles"""
-        for user_url in self.db.get_users_to_get_profiles():
-            self.get_user_profile(user_url)
+        for user in self.db.get_users_to_get_profiles():
+            user_url = user[0]
+            try:
+                self.get_user_profile(user_url)
+            except Exception as err:
+                logger.warning("%s get profile failed: %s", user_url, err)
 
     def quit(self):
         """quit the driver"""

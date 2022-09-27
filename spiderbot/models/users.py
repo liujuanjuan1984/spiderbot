@@ -4,7 +4,7 @@
 """users.py"""
 import logging
 
-from sqlalchemy import Column, Integer, LargeBinary, String
+from sqlalchemy import Boolean, Column, Integer, LargeBinary, String
 
 from spiderbot.models.base import Base, current_time
 
@@ -24,7 +24,7 @@ class User(Base):
     uid = Column(Integer, primary_key=True, unique=True, index=True)
     user_url = Column(String, unique=True, index=True)
     name = Column(String, default=None)
-    working_status = Column(Integer, default=None)
+    working_status = Column(Boolean, default=None)
     avatar = Column(LargeBinary, default=None)
     created_at = Column(String, default=current_time)
     updated_at = Column(String, default=current_time)

@@ -5,7 +5,7 @@ import logging
 
 from spiderbot.bot import SpiderBot
 
-__version__ = "0.2.0"
+__version__ = "0.3.2"
 __author__ = "liujuanjuan1984"
 
 # Set default logging handler to avoid "No handler found" warnings.
